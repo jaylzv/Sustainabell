@@ -1,0 +1,81 @@
+Sub CreateSheetsAndFilterOutliers()
+    Dim sourceSheet As Worksheet
+    Dim newSheet As Worksheet
+    Dim lastCol As Long
+    Dim col As Long
+    Dim sheetName As String
+    Dim i As Long
+    Dim j As Long
+    Dim arr As Variant
+    Dim mean As Double
+    Dim stdev As Double
+
+    'Attribute for CSV Export
+    Dim logStr As String
+    Dim counter As Long
+
+    'Importing CSV attributes
+    Dim strFile As String
+
+    'Get the name of the workbook without the file extension
+    Dim bookName As String
+    bookName = Left(ThisWorkbook.Name, InStrRev(ThisWorkbook.Name, ".") - 1)
+
+    If Right$(ActiveSheet.Name, 3) = "csv" Then
+        Set sourceSheet = ActiveSheet
+        strFile = Application.GetOpenFilename("Text Files (*csv),*.csv", , ActiveSheet.Name)
+
+        With sourceSheet.QueryTables.Add(Connection:="TEXT;" & strFile, Destination:=sourceSheet.Range("A1")) 'A1 because the localization of the has been already done
+            .TextFileParserType = xlDelimited
+            .TextFileCommaDelimiter = True
+            .Refresh
+        End With
+    Else
+        Set sourceSheet = ActiveSheet
+    End If
+    
+    lastCol = sourceSheet.Cells(5, Columns.Count).End(xlToLeft).Column
+    
+    For col = 2 To lastCol
+        sheetName = sourceSheet.Cells(5, col).Value
+        
+        If sheetName <> "" Then
+            Set newSheet = Sheets.Add(After:=Sheets(Sheets.Count))
+            newSheet.Name = sheetName
+            
+            arr = sourceSheet.Range(sourceSheet.Cells(23, col), sourceSheet.Cells(sourceSheet.Cells(Rows.Count, col).End(xlUp).Row, col)).Value
+            mean = WorksheetFunction.Average(arr)
+            stdev = WorksheetFunction.StDev_S(arr)
+            
+            j = 1
+            For i = 23 To sourceSheet.Cells(Rows.Count, 1).End(xlUp).Row
+                If sourceSheet.Cells(i, col).Value <> "" And sourceSheet.Cells(i, col).Value >= mean - 3 * stdev And sourceSheet.Cells(i, col).Value <= mean + 3 * stdev Then
+                    newSheet.Cells(j, 1).Value = sourceSheet.Cells(i, 1).Value
+                    newSheet.Cells(j, 2).Value = sourceSheet.Cells(i, col).Value
+                    j = j + 1
+                End If
+            Next i
+            
+            'Export sheet to CSV
+            Dim csvPath As String
+            csvPath = ThisWorkbook.Path & "\" & bookName & "_" & sheetName & ".csv"
+            newSheet.Copy
+            ActiveWorkbook.SaveAs Filename:=csvPath, FileFormat:=xlCSV, CreateBackup:=False
+            ActiveWorkbook.Close False
+            
+        End If
+    Next col
+
+    'Exporting to a csv
+    For counter = 1 To sourceSheet.UsedRange.Rows.Count
+        logStr = logStr & sourceSheet.Cells(counter, "A").Value & " , "
+    Next counter
+
+    Dim logPath As String
+    logPath = ThisWorkbook.Path & "\" & bookName & "_log.csv"
+    Open logPath For Append As #1
+    Print #1, logStr
+    Close #1
+
+End Sub
+
